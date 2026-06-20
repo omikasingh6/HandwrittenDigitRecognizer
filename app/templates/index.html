@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Digit Recognizer</title>
+
+  <!-- Google Fonts: display + mono pairing -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ── Design tokens ───────────────────────────────────────────────────── */
+    :root {
+      --bg:       #0c0c10;
+      --surface:  #14141c;
+      --border:   #2a2a38;
+      --accent:   #6ee7b7;     /* mint green */
+      --accent2:  #818cf8;     /* indigo     */
+      --text:     #e2e8f0;
+      --muted:    #64748b;
+      --danger:   #f87171;
+      --radius:   12px;
+      --mono:     'Space Mono', monospace;
+      --display:  'Syne', sans-serif;
+    }
+
+    /* ── Reset ───────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+
+    /* ── Header ──────────────────────────────────────────────────────────── */
+    header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+    header .label {
+      font-family: var(--mono);
+      font-size: .7rem;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: .4rem;
+    }
+    header h1 {
+      font-family: var(--display);
+      font-size: clamp(1.8rem, 5vw, 3rem);
+      font-weight: 800;
+      letter-spacing: -.02em;
+      line-height: 1.1;
+    }
+    header h1 span { color: var(--accent); }
+    header p {
+      margin-top: .6rem;
+      color: var(--muted);
+      font-size: .8rem;
+    }
+
+    /* ── Main card ───────────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2rem;
+      width: 100%;
+      max-width: 820px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+    }
+    @media (max-width: 600px) { .card { grid-template-columns: 1fr; } }
+
+    /* ── Canvas column ───────────────────────────────────────────────────── */
+    .canvas-col { display: flex; flex-direction: column; gap: 1rem; }
+
+    .canvas-wrap {
+      position: relative;
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: #000;
+      cursor: crosshair;
+      /* subtle grid reminiscent of graph paper */
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 28px 28px;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      aspect-ratio: 1;
+      touch-action: none;
+    }
+
+    .hint {
+      font-size: .7rem;
+      color: var(--muted);
+      text-align: center;
+      letter-spacing: .05em;
+    }
+
+    /* ── Buttons ──────────────────────────────────────────────────────────── */
+    .btn-row { display: flex; gap: .75rem; }
+    button {
+      flex: 1;
+      font-family: var(--mono);
+      font-size: .8rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      border: none;
+      border-radius: 8px;
+      padding: .75rem 1rem;
+      cursor: pointer;
+      transition: transform .1s, opacity .15s;
+    }
+    button:active { transform: scale(.97); }
+
+    .btn-predict {
+      background: var(--accent);
+      color: #000;
+      font-weight: 700;
+    }
+    .btn-predict:hover { opacity: .85; }
+
+    .btn-clear {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .btn-clear:hover { border-color: var(--danger); color: var(--danger); }
+
+    /* ── Result column ───────────────────────────────────────────────────── */
+    .result-col { display: flex; flex-direction: column; gap: 1.5rem; }
+
+    /* big digit display */
+    .digit-display {
+      background: #000;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      gap: .5rem;
+      min-height: 140px;
+    }
+    .digit-display .big-digit {
+      font-family: var(--display);
+      font-size: 5rem;
+      font-weight: 800;
+      color: var(--accent);
+      line-height: 1;
+      letter-spacing: -.04em;
+      transition: all .25s ease;
+    }
+    .digit-display .confidence-badge {
+      font-size: .75rem;
+      background: rgba(110,231,183,.12);
+      color: var(--accent);
+      padding: .25rem .75rem;
+      border-radius: 99px;
+      letter-spacing: .1em;
+    }
+    .digit-display .placeholder {
+      color: var(--muted);
+      font-size: .75rem;
+      letter-spacing: .1em;
+    }
+
+    /* probability bars */
+    .probs-title {
+      font-size: .65rem;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .prob-bars { display: flex; flex-direction: column; gap: .45rem; }
+    .prob-row  { display: flex; align-items: center; gap: .6rem; font-size: .72rem; }
+    .prob-label { width: 1rem; text-align: right; color: var(--muted); }
+    .prob-track {
+      flex: 1;
+      height: 6px;
+      background: var(--border);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .prob-fill {
+      height: 100%;
+      border-radius: 99px;
+      background: var(--accent2);
+      width: 0%;
+      transition: width .4s cubic-bezier(.4,0,.2,1);
+    }
+    .prob-fill.top { background: var(--accent); }
+    .prob-pct {
+      width: 3.2rem;
+      text-align: right;
+      color: var(--muted);
+      font-size: .65rem;
+    }
+
+    /* ── Visualizations ──────────────────────────────────────────────────── */
+    .viz-section { width: 100%; max-width: 820px; margin-top: 2rem; }
+    .viz-section h2 {
+      font-family: var(--display);
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      color: var(--muted);
+    }
+    .viz-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 600px) { .viz-grid { grid-template-columns: 1fr; } }
+    .viz-img {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .viz-img img { width: 100%; display: block; }
+    .viz-img .viz-label {
+      padding: .5rem .75rem;
+      font-size: .65rem;
+      color: var(--muted);
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    /* ── Loading spinner ─────────────────────────────────────────────────── */
+    .spinner {
+      display: none;
+      width: 20px; height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      margin: auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Footer ──────────────────────────────────────────────────────────── */
+    footer {
+      margin-top: 2.5rem;
+      font-size: .65rem;
+      color: var(--muted);
+      letter-spacing: .08em;
+    }
+  </style>
+</head>
+
+<body>
+
+  <header>
+    <p class="label">CNN · MNIST · TensorFlow</p>
+    <h1>Handwritten <span>Digit</span> Recognizer</h1>
+    <p>Draw a digit (0–9) in the canvas and hit Predict</p>
+  </header>
+
+  <!-- ── Main card ───────────────────────────────────────────────────────── -->
+  <div class="card">
+
+    <!-- Left: canvas -->
+    <div class="canvas-col">
+      <div class="canvas-wrap">
+        <canvas id="drawCanvas" width="280" height="280"></canvas>
+      </div>
+      <p class="hint">✏️ Draw freely · Stroke width adapts automatically</p>
+      <div class="btn-row">
+        <button class="btn-predict" id="btnPredict">⚡ Predict</button>
+        <button class="btn-clear"   id="btnClear">✕ Clear</button>
+      </div>
+      <div class="spinner" id="spinner"></div>
+    </div>
+
+    <!-- Right: result -->
+    <div class="result-col">
+
+      <div class="digit-display" id="digitDisplay">
+        <span class="big-digit"   id="bigDigit">—</span>
+        <span class="confidence-badge" id="confBadge" style="display:none"></span>
+        <span class="placeholder" id="placeholder">awaiting prediction</span>
+      </div>
+
+      <p class="probs-title">Probability distribution</p>
+      <div class="prob-bars" id="probBars">
+        <!-- generated by JS -->
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Training visualisations (shown only when images exist) ─────────── -->
+  <div class="viz-section">
+    <h2>/ Model Analytics</h2>
+    <div class="viz-grid">
+      <div class="viz-img">
+        <div class="viz-label">Training history</div>
+        <img src="/static/training_history.png"
+             onerror="this.closest('.viz-img').style.display='none'"
+             alt="Training history" />
+      </div>
+      <div class="viz-img">
+        <div class="viz-label">Confusion matrix</div>
+        <img src="/static/confusion_matrix.png"
+             onerror="this.closest('.viz-img').style.display='none'"
+             alt="Confusion matrix" />
+      </div>
+    </div>
+  </div>
+
+  <footer>Built with TensorFlow · Flask · Vanilla JS &nbsp;|&nbsp; MNIST Dataset</footer>
+
+
+  <script>
+  // ════════════════════════════════════════════════════════════════
+  //  Canvas drawing logic
+  // ════════════════════════════════════════════════════════════════
+
+  const canvas  = document.getElementById("drawCanvas");
+  const ctx     = canvas.getContext("2d");
+
+  let isDrawing = false;
+  let lastX = 0, lastY = 0;
+
+  // Set up canvas style
+  ctx.lineJoin    = "round";
+  ctx.lineCap     = "round";
+  ctx.lineWidth   = 18;       // thick strokes → cleaner 28×28 downsample
+  ctx.strokeStyle = "#ffffff";
+
+  // Scale helper: canvas internal px vs CSS px differ on hi-DPI screens
+  function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width  / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const src = e.touches ? e.touches[0] : e;
+    return [
+      (src.clientX - rect.left) * scaleX,
+      (src.clientY - rect.top)  * scaleY,
+    ];
+  }
+
+  function startDraw(e) {
+    e.preventDefault();
+    isDrawing = true;
+    [lastX, lastY] = getPos(e);
+    // Draw a dot for single clicks/taps
+    ctx.beginPath();
+    ctx.arc(lastX, lastY, ctx.lineWidth / 2, 0, Math.PI * 2);
+    ctx.fillStyle = "#fff";
+    ctx.fill();
+  }
+
+  function draw(e) {
+    if (!isDrawing) return;
+    e.preventDefault();
+    const [x, y] = getPos(e);
+    ctx.beginPath();
+    ctx.moveTo(lastX, lastY);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    [lastX, lastY] = [x, y];
+  }
+
+  function stopDraw() { isDrawing = false; }
+
+  canvas.addEventListener("mousedown",  startDraw);
+  canvas.addEventListener("mousemove",  draw);
+  canvas.addEventListener("mouseup",    stopDraw);
+  canvas.addEventListener("mouseleave", stopDraw);
+  canvas.addEventListener("touchstart", startDraw, { passive: false });
+  canvas.addEventListener("touchmove",  draw,      { passive: false });
+  canvas.addEventListener("touchend",   stopDraw);
+
+
+  // ════════════════════════════════════════════════════════════════
+  //  Probability bars (built once, updated on each prediction)
+  // ════════════════════════════════════════════════════════════════
+
+  const probBars = document.getElementById("probBars");
+
+  // Build 10 rows
+  for (let d = 0; d < 10; d++) {
+    probBars.insertAdjacentHTML("beforeend", `
+      <div class="prob-row">
+        <span class="prob-label">${d}</span>
+        <div class="prob-track">
+          <div class="prob-fill" id="fill-${d}" style="width:0%"></div>
+        </div>
+        <span class="prob-pct" id="pct-${d}">0%</span>
+      </div>
+    `);
+  }
+
+  function updateBars(probs, topDigit) {
+    probs.forEach((p, d) => {
+      const fill = document.getElementById(`fill-${d}`);
+      const pct  = document.getElementById(`pct-${d}`);
+      fill.style.width = p + "%";
+      fill.classList.toggle("top", d === topDigit);
+      pct.textContent = p.toFixed(1) + "%";
+    });
+  }
+
+
+  // ════════════════════════════════════════════════════════════════
+  //  Predict
+  // ════════════════════════════════════════════════════════════════
+
+  const btnPredict  = document.getElementById("btnPredict");
+  const btnClear    = document.getElementById("btnClear");
+  const bigDigit    = document.getElementById("bigDigit");
+  const confBadge   = document.getElementById("confBadge");
+  const placeholder = document.getElementById("placeholder");
+  const spinner     = document.getElementById("spinner");
+
+  btnPredict.addEventListener("click", async () => {
+    const dataURL = canvas.toDataURL("image/png");
+
+    // Show spinner, hide result
+    spinner.style.display = "block";
+    btnPredict.disabled = true;
+
+    try {
+      const res  = await fetch("/predict", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ image: dataURL }),
+      });
+      const data = await res.json();
+
+      if (data.error) throw new Error(data.error);
+
+      // Update large digit
+      bigDigit.textContent = data.digit;
+      placeholder.style.display = "none";
+      confBadge.style.display   = "inline-block";
+      confBadge.textContent     = data.confidence.toFixed(1) + "% confidence";
+
+      // Update bars
+      updateBars(data.probabilities, data.digit);
+
+    } catch (err) {
+      bigDigit.textContent = "!";
+      confBadge.textContent = err.message;
+      confBadge.style.display = "inline-block";
+    } finally {
+      spinner.style.display = "none";
+      btnPredict.disabled   = false;
+    }
+  });
+
+
+  // ════════════════════════════════════════════════════════════════
+  //  Clear
+  // ════════════════════════════════════════════════════════════════
+
+  btnClear.addEventListener("click", () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    bigDigit.textContent      = "—";
+    placeholder.style.display = "inline";
+    confBadge.style.display   = "none";
+
+    for (let d = 0; d < 10; d++) {
+      document.getElementById(`fill-${d}`).style.width = "0%";
+      document.getElementById(`pct-${d}`).textContent  = "0%";
+    }
+  });
+
+  </script>
+</body>
+</html>
